@@ -4,12 +4,15 @@ import csv
 import datetime
 import os
 import pickle
-from pathlib import Path
+import smtplib
+from email.MIMEMultipart import MIMEMultipart
+from email.MIMEText import MIMEText
 
-import pandas as pd
 import colorlover as cl
+import pandas as pd
 import plotly.graph_objs as go
-from bottle import route, run, template, post, request
+from bottle import route, run, template, post, request, error
+from pathlib import Path
 from plotly.offline import plot
 
 FILENAME = 'temperature.csv'
@@ -31,48 +34,50 @@ def get_temperature(sensor, temperatura):
         if csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=COLUNAS)
             writer.writerow({'Sensor': sensor, 'Temperatura': temperatura, 'Horario': str(datetime.datetime.now())})
+
         else:
             writer = csv.DictWriter(csvfile, fieldnames=COLUNAS)
             writer.writerow({'Sensor': 'Sensor', 'Temperatura': 'Temperatura', 'Horario': 'Horario'})
 
-
-@route('/')
-def do_index():
-    return u'<a href="chart">Sensores</a> | <a href="config">Configurações</a>'
+        check_temperature(sensor=check_exist(p=sensor, default=sensor), temperatura=temperatura)
 
 
-@route('/chart')
-def do_chart():
+@route('/table_plot')
+def do_table_plot():
     df_temperature = pd.read_csv('temperature.csv') if Path('temperature.csv').is_file() else []
 
     df_last = pd.DataFrame(columns=COLUNAS)
 
-    param = load_obj('config')
-
     if len(df_temperature) == 0:
         return u'<p>Nenhum sensor encontrado</p>'
 
-    for record in df_temperature['Sensor'].unique():
-        df = df_temperature[df_temperature['Sensor'] == record]
-        horario = df_temperature[df_temperature['Sensor'] == record].Horario.max()
-        df_last.loc[len(df_last)] = df[df['Horario'] == horario].values.tolist()[0]
+    for record in df_temperature["Sensor"].unique():
+        df = df_temperature[df_temperature["Sensor"] == record]
+        horario = df_temperature[df_temperature["Sensor"] == record].Horario.max()
+        df_last.loc[len(df_last)] = df[df["Horario"] == horario].values.tolist()[0]
 
-    rgb_list = slice_list(
-        [convert_to_rgb(
-            int(df_last.loc[i]['Temperatura']),
-            int(param.get('minimo')[0]),
-            int(param.get('maximo')[0])) for i in df_last.index])
+    rgb_list = []
+
+    df_last.set_index('Sensor', inplace=True)
+
+    for i in df_last.index:
+        minimo = int(check_exist(p='min_'+str(i), default='min_geral'))
+        maximo = int(check_exist(p='max_'+str(i), default='max_geral'))
+        rgb_list.append(convert_to_rgb(t=df_last.loc[i]['Temperatura'], minimo=minimo, maximo=maximo))
+
+    rgb_list = slice_list(rgb_list)
 
     sensor_list = slice_list(
-        [param.get(str(i+1))[0] + ': ' + str(df_last.loc[i]['Temperatura']) + ' ºC' for i in df_last.index])
+        [check_exist(str(i), 'S'+str(i)) + '<br />' +
+         str(df_last.loc[i]['Temperatura']) + ' ºC' for i in df_last.index])
 
     trace1 = go.Table({
         'cells': {
             'align': 'center',
             'fill': {'color': rgb_list},
-            'font': {'color': 'white', 'size': 40},
-            'height': 50,
-            'line': {'color': rgb_list},
+            'font': {'color': 'white', 'size': 15},
+            'height': 20,
+            'line': {'color': "#fff"},
             'values': sensor_list,
         },
         "header": {
@@ -82,6 +87,7 @@ def do_chart():
             "line": {"color": "white"},
             "values": ['']
         },
+        "columnwidth":100,
         "type": "table"
     })
 
@@ -91,94 +97,77 @@ def do_chart():
     return template(html.read())
 
 
+@route('/')
+def do_index():
+    return template('views/index')
+
+
 @post('/save-config')
 def do_save_config():
     save_obj(request.forms.dict, 'config')
-    return do_chart()
+    return do_configuracoes(save=True)
 
 
 @route('/config')
-def do_configuracoes():
+def do_configuracoes(save=False):
     df_temperature = pd.read_csv('temperature.csv')
 
-    response = '''
-    <html>
-<!-- Latest compiled and minified CSS -->
-<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" 
-integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+    min_geral = int(check_exist(p='min_geral', default=20))
+    max_geral = int(check_exist(p='max_geral', default=25))
 
-<!-- Optional theme -->
-<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap-theme.min.css" 
-integrity="sha384-rHyoN1iRsVXV4nD0JutlnGaslCJuC7uwjduW9SVrLvRYooPp2bWYgmgJQIXwl/Sp" crossorigin="anonymous">
+    smtp_server = str(check_exist(p='smtp_server', default=''))
+    smtp_port = str(check_exist(p='smtp_port', default=''))
+    smtp_email = str(check_exist(p='smtp_email', default=''))
+    smtp_password = str(check_exist(p='smtp_password', default=''))
+    send_emails = str(check_exist(p='send_emails', default=''))
 
-<!-- Latest compiled and minified JavaScript -->
-<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"
-integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous">
-</script>
+    list_sensores = []
+
+    for s in df_temperature['Sensor'].unique():
+        s = str(s)
+        list_sensores.append([s, str(check_exist(p=s, default=str('S'+s))),
+                              str(check_exist(p='min_'+s, default='min_geral')),
+                              str(check_exist(p='max_'+s, default='max_geral')), ])
+
+    return template('views/config', s=save, min_geral=min_geral, max_geral=max_geral, smtp_server=smtp_server,
+                    smtp_port=smtp_port, smtp_email=smtp_email, smtp_password=smtp_password, send_emails=send_emails,
+                    list_sensores=list_sensores)
 
 
-<body> 
-<div class="center-block" style="width:50%;">
-<p class='h1'>Configurações</p>
-<p class='h3'>Temperatura mínima e máxima para alerta</p>
-<form action="/save-config" method="post">
-    <div class="form-group row">
-        <label for="minimo" class="col-sm-2 col-form-label">Minimo</label>
-        <div class="col-sm-10">
-            <input type="number" value="20" class="form-control" id="minimo" name="minimo"/>
-        </div>
-    </div>
+def check_exist(p, default=''):
+    param = load_obj('config')
+    p = str(param.get(p)[0]) if p in param else False
+    default = str(param.get(default)[0]) if default in param else default
+    return p or default
 
-    <div class="form-group row">
-        <label for="maximo" class="col-sm-2 col-form-label">Máximo</label>
-        <div class="col-sm-10">
-            <input type="number" value="25" class="form-control" id="maximo" name="maximo"/>
-        </div>
-    </div>
-    
-    <p class='h3'>Emails para alerta</p>
-    <div class="form-group row">
-        <label for="email1" class="col-sm-2 col-form-label">Email 1</label>
-        <div class="col-sm-10">
-            <input type="email" class="form-control" id="email1" name="email1"/>
-        </div>
-    </div>
 
-    <div class="form-group row">
-        <label for="email2" class="col-sm-2 col-form-label">Email 2</label>
-        <div class="col-sm-10">
-            <input type="email" class="form-control" id="email2" name="email2"/>
-        </div>
-    </div>
+#vifzsjvxzgqzpefe
+def send_email(sensor, temperatura):
+    fromaddr = check_exist(p='smtp_email')
+    toaddr = check_exist('send_emails')
+    msg = MIMEMultipart()
+    msg['From'] = fromaddr
+    msg['To'] = toaddr
+    msg['Subject'] = "Sensor: "+sensor+" | Temperatura: "+temperatura
 
-    <div class="form-group row">
-        <label for="email3" class="col-sm-2 col-form-label">Email 3</label>
-        <div class="col-sm-10">
-            <input type="email" class="form-control" id="email3" name="email3"/>
-        </div>
-    </div>
-    
-    <p class='h3'>Trocar Label do Sensor</p>
-'''
+    body = 'Sensor: ' + sensor + ' | Temperatura: ' + temperatura
+    msg.attach(MIMEText(body, 'plain'))
 
-    for record in df_temperature['Sensor'].unique():
-        response = response+'''
-        
-    <div class="form-group row">
-        <label for="'''+str(record)+'''" class="col-sm-2 col-form-label">Sensor '''+str(record)+'''</label>
-        <div class="col-sm-10">
-            <input type="text" class="form-control" id="'''+str(record)+'''" name="'''+str(record)+'''" 
-                    value="Sensor '''+str(record)+'''"/>
-        </div>
-    </div>'''
+    server = smtplib.SMTP(check_exist(p='smtp_server'), check_exist(p='smtp_port'))
+    server.ehlo()
+    server.starttls()
+    server.login(fromaddr, check_exist('smtp_password'))
+    text = msg.as_string()
+    server.sendmail(fromaddr, toaddr, text)
+    server.quit()
 
-    response = response + '''
-    <input class="btn btn-default" value="Atualizar" type="submit" />
-</div>
-</form>
-</body>
-</html>'''
-    return response
+
+def check_temperature(sensor, temperatura):
+    minima = int(check_exist('min_'+str(sensor), 'min_geral'))
+    maxima = int(check_exist('max_'+str(sensor), 'max_geral'))
+
+    if temperatura <= minima or temperatura >= maxima:
+        send_email(sensor=sensor, temperatura=temperatura)
 
 
 def save_obj(obj, name):
@@ -187,13 +176,17 @@ def save_obj(obj, name):
 
 
 def load_obj(name):
-    with open('obj/' + name + '.pkl', 'rb') as f:
+    if not Path('obj/' + name + '.pkl').is_file():
+        save_obj({'min_geral': ['20'], 'max_geral': ['25'], }, 'config')
+
+    with open('obj/' + name + '.pkl', 'rw') as f:
         return pickle.load(f)
 
 
-def slice_list(l, n=3):
+def slice_list(l, maxcols=5):
     splited = []
     len_l = len(l)
+    n = max([i if len_l % i is 0 else 0 for i in range(1, maxcols)])
     for i in range(n):
         start = int(i * len_l / n)
         end = int((i + 1) * len_l / n)
@@ -203,8 +196,9 @@ def slice_list(l, n=3):
 
 
 def convert_to_rgb(t, minimo, maximo):
-    paleta = ((t - int(minimo)) * len(PALETA)) / (int(maximo)-int(minimo))
-    paleta = len(PALETA)-1 if paleta >= (len(PALETA)-1) else paleta
+    max_min = int(maximo) - int(minimo) or 1
+    paleta = ((int(t) - int(minimo)) * len(PALETA)) / max_min
+    paleta = len(PALETA) - 1 if paleta >= (len(PALETA) - 1) else paleta
     paleta = 0 if paleta <= 0 else paleta
 
     return PALETA[paleta]
