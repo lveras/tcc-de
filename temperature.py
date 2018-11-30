@@ -11,7 +11,7 @@ from email.MIMEText import MIMEText
 import colorlover as cl
 import pandas as pd
 import plotly.graph_objs as go
-from bottle import route, run, template, post, request, error
+from bottle import route, run, template, post, request
 from pathlib import Path
 from plotly.offline import plot
 
