@@ -39,7 +39,7 @@ def get_temperature(sensor, temperatura):
             writer = csv.DictWriter(csvfile, fieldnames=COLUNAS)
             writer.writerow({'Sensor': 'Sensor', 'Temperatura': 'Temperatura', 'Horario': 'Horario'})
 
-        check_temperature(sensor=check_exist(p=sensor, default=sensor), temperatura=temperatura)
+        check_temperature(sensor=check_exist(p=sensor, default=sensor), temperatura=int(temperatura))
 
 
 @route('/table_plot')
@@ -125,7 +125,7 @@ def do_configuracoes(save=False):
 
     for s in df_temperature['Sensor'].unique():
         s = str(s)
-        list_sensores.append([s, str(check_exist(p=s, default=str('S'+s))),
+        list_sensores.append([s, str(check_exist(p='label_'+s, default=str('S'+s))),
                               str(check_exist(p='min_'+s, default='min_geral')),
                               str(check_exist(p='max_'+s, default='max_geral')), ])
 
@@ -138,11 +138,13 @@ def check_exist(p, default=''):
     param = load_obj('config')
     p = str(param.get(p)[0]) if p in param else False
     default = str(param.get(default)[0]) if default in param else default
+
     return p or default
 
 
-#vifzsjvxzgqzpefe
 def send_email(sensor, temperatura):
+    temperatura = str(temperatura)
+
     fromaddr = check_exist(p='smtp_email')
     toaddr = check_exist('send_emails')
     msg = MIMEMultipart()
