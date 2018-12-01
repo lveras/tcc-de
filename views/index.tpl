@@ -25,14 +25,6 @@
         </style>
         <meta name="description" content="">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <script>
-            window.setInterval("reloadIFrame();", 30000);
-
-            function reloadIFrame() {
-                $('#table_plot').attr('src', $('#table_plot').attr('src'));
-            }
-
-        </script>
     </head>
 
     <body>
@@ -63,12 +55,31 @@
               </div>
               <div class="modal-body">
                 <div class="embed-responsive embed-responsive-4by3">
-                    <iframe class="embed-responsive-item" src="config" ></iframe>
+                    <iframe id='iframeConfig' class="embed-responsive-item" src="config" ></iframe>
                 </div>
+              </div>
+              <div class="modal-footer">
+                  <button type="button" id="saveConfig" name="saveConfig" class="btn btn-primary">Salvar</button>
+                  <button type="button" class="btn btn-secondary" data-dismiss="modal">Fechar</button>
               </div>
             </div>
           </div>
         </div>
+
+        <script>
+            window.setInterval("reloadIFrame();", 30000);
+
+            function reloadIFrame() {
+                $('#table_plot').attr('src', $('#table_plot').attr('src'));
+            }
+
+            $(document).ready(function(){
+                $('#saveConfig').click(function(){
+                    $('#iframeConfig').contents().find('form').submit();
+                    //$('#iframeConfig').attr('src', $('#iframeConfig').attr('src'));
+                })
+            })
+        </script>
 
       </footer>
 </html>

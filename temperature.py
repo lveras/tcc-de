@@ -18,10 +18,7 @@ from plotly.offline import plot
 FILENAME = 'temperature.csv'
 COLUNAS = ['Sensor', 'Temperatura', 'Horario']
 
-PALETA = cl.scales['11']['div']['RdYlGn']
-for x in range(0, 2):
-    PALETA.remove(PALETA[4])
-PALETA.reverse()
+PALETA = cl.scales['5']['seq']['YlGn'][1:]
 
 
 @route('/t/<sensor>/<temperatura>')
@@ -198,6 +195,12 @@ def slice_list(l, maxcols=5):
 
 
 def convert_to_rgb(t, minimo, maximo):
+    if t < minimo or t > maximo:
+        return 'rgb(255,0,0)'
+
+    if t == minimo or t == maximo:
+        return 'rgb(255,128,0)'
+
     max_min = int(maximo) - int(minimo) or 1
     paleta = ((int(t) - int(minimo)) * len(PALETA)) / max_min
     paleta = len(PALETA) - 1 if paleta >= (len(PALETA) - 1) else paleta

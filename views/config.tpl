@@ -2,6 +2,9 @@
     <head>
         <meta charset="utf-8">
         <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+
         <title>Sistema de aferição de temperatura multi sensores.</title>
 
         <!-- Latest compiled and minified CSS -->
@@ -12,8 +15,12 @@
         <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
         <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/js/bootstrap.min.js"
         integrity="sha384-ChfqqxuZUCnJSK3+MXmPNIyE6ZbWh2IMqE241rYiqJxyMiZ6OW/JmZQ5stwEULTy" crossorigin="anonymous"></script>
-        <meta name="description" content="">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
+
+        <script>
+            $('document').ready(function(){
+                $('div.alert').delay(5000).fadeOut('slow');
+            })
+        </script>
     </head>
 
     <body>
@@ -77,7 +84,7 @@
                             <div class="form-group row">
                                 <label for="{{s[0] or ''}}" class="col-sm-2 col-form-label">Sensor {{s[0] or ''}}</label>
                                 <div class="col-sm-4">
-                                    <input type="text" class="form-control" id="{{s[0] or ''}}" name="{{s[0] or ''}}"
+                                    <input type="text" class="form-control" id="label_{{s[0] or ''}}" name="label_{{s[0] or ''}}"
                                             placeholder="Ex. Sala de reunião 1"
                                             value="{{s[1] or ''}}"/>
                                 </div>
@@ -95,10 +102,6 @@
                                 </div>
                             </div>
                         %end
-                        <div class="modal-footer">
-                          <button type="submit" class="btn btn-primary">Salvar configurações</button>
-                          <button type="button" class="btn btn-secondary" data-dismiss="modal">Fechar</button>
-                        </div>
                     </form>
                 </div>
             </div>
