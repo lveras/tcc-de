@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import csv
-import datetime
 import os
 import pickle
 import smtplib
@@ -9,64 +7,73 @@ from email.MIMEMultipart import MIMEMultipart
 from email.MIMEText import MIMEText
 
 import colorlover as cl
-import pandas as pd
 import plotly.graph_objs as go
 from bottle import route, run, template, post, request
 from pathlib import Path
 from plotly.offline import plot
-
-FILENAME = 'temperature.csv'
-COLUNAS = ['Sensor', 'Temperatura', 'Horario']
+import sqlite3
 
 PALETA = cl.scales['5']['seq']['YlGn'][1:]
+DATABASE = 'database.db'
 
 
-@route('/t/<sensor>/<temperatura>')
-def get_temperature(sensor, temperatura):
-    if not Path('temperature.csv').is_file():
-        with open(FILENAME, 'a') as csvfile:
-            csvfile.write('Sensor,Temperatura,Horario\n')
+def get_db():
+    conn = sqlite3.connect('database.db')
+    c = conn.cursor()
+    c.execute("SELECT count(name) FROM sqlite_master "
+              "WHERE type = 'table' AND name = 'tb_afericao'")
 
-    with open(FILENAME, 'a') as csvfile:
-        if csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=COLUNAS)
-            writer.writerow({'Sensor': sensor, 'Temperatura': temperatura, 'Horario': str(datetime.datetime.now())})
+    if c.rowcount == 0:
+        c.execute("CREATE TABLE tb_afericao(id INTEGER PRIMARY KEY, "
+                  "sensor INTEGER NOT NULL, val FLOAT NOT NULL, "
+                  "create_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
 
-        else:
-            writer = csv.DictWriter(csvfile, fieldnames=COLUNAS)
-            writer.writerow({'Sensor': 'Sensor', 'Temperatura': 'Temperatura', 'Horario': 'Horario'})
+    return c, conn
 
-        check_temperature(sensor=check_exist(p=sensor, default=sensor), temperatura=int(temperatura))
+
+def exec_query(query):
+    c, conn = get_db()
+    c.execute(query)
+    result = c.fetchall()
+    conn.commit()
+    conn.close()
+    return result
+
+
+@route('/t/<sensor>/<val>')
+def set_val(sensor, val):
+
+    exec_query("INSERT INTO tb_afericao(sensor, val) VALUES({}, {})".
+               format(sensor, val))
+
+    check_val(sensor=check_exist(p=sensor, default=sensor),
+              val=float(val))
 
 
 @route('/table_plot')
 def do_table_plot():
-    df_temperature = pd.read_csv('temperature.csv') if Path('temperature.csv').is_file() else []
+    ult_temp = []
+    sensor_list = exec_query("SELECT distinct sensor FROM tb_afericao")
+    for sensor in sensor_list:
+        res = exec_query("SELECT val, max(create_date) FROM "
+                         "tb_afericao WHERE sensor = {}".format(sensor[0]))
+        ult_temp.append([sensor[0], res[0][0]])
 
-    df_last = pd.DataFrame(columns=COLUNAS)
-
-    if len(df_temperature) == 0:
+    if len(ult_temp) == 0:
         return u'<p>Nenhum sensor encontrado</p>'
-
-    for record in df_temperature["Sensor"].unique():
-        df = df_temperature[df_temperature["Sensor"] == record]
-        horario = df_temperature[df_temperature["Sensor"] == record].Horario.max()
-        df_last.loc[len(df_last)] = df[df["Horario"] == horario].values.tolist()[0]
 
     rgb_list = []
 
-    df_last.set_index('Sensor', inplace=True)
-
-    for i in df_last.index:
-        minimo = int(check_exist(p='min_'+str(i), default='min_geral'))
-        maximo = int(check_exist(p='max_'+str(i), default='max_geral'))
-        rgb_list.append(convert_to_rgb(t=df_last.loc[i]['Temperatura'], minimo=minimo, maximo=maximo))
+    for i in ult_temp:
+        minimo = int(check_exist(p='min_'+str(i[0]), default='min_geral'))
+        maximo = int(check_exist(p='max_'+str(i[0]), default='max_geral'))
+        rgb_list.append(convert_to_rgb(t=i[1], minimo=minimo, maximo=maximo))
 
     rgb_list = slice_list(rgb_list)
 
     sensor_list = slice_list(
-        [check_exist(str(i), 'S'+str(i)) + '<br />' +
-         str(df_last.loc[i]['Temperatura']) + ' ºC' for i in df_last.index])
+        [check_exist(str(i[0]), 'S'+str(i[0])) + '<br />' +
+         str(i[1]) + ' ºC' for i in ult_temp])
 
     trace1 = go.Table({
         'cells': {
@@ -107,7 +114,7 @@ def do_save_config():
 
 @route('/config')
 def do_configuracoes(save=False):
-    df_temperature = pd.read_csv('temperature.csv')
+    sensor_list = exec_query("SELECT distinct sensor FROM tb_afericao")
 
     min_geral = int(check_exist(p='min_geral', default=20))
     max_geral = int(check_exist(p='max_geral', default=25))
@@ -120,8 +127,8 @@ def do_configuracoes(save=False):
 
     list_sensores = []
 
-    for s in df_temperature['Sensor'].unique():
-        s = str(s)
+    for s in sensor_list:
+        s = str(s[0])
         list_sensores.append([s, str(check_exist(p='label_'+s, default=str('S'+s))),
                               str(check_exist(p='min_'+s, default='min_geral')),
                               str(check_exist(p='max_'+s, default='max_geral')), ])
@@ -139,17 +146,17 @@ def check_exist(p, default=''):
     return p or default
 
 
-def send_email(sensor, temperatura):
-    temperatura = str(temperatura)
+def send_email(sensor, val):
+    val = str(val)
 
     fromaddr = check_exist(p='smtp_email')
     toaddr = check_exist('send_emails')
     msg = MIMEMultipart()
     msg['From'] = fromaddr
     msg['To'] = toaddr
-    msg['Subject'] = "Sensor: "+sensor+" | Temperatura: "+temperatura
+    msg['Subject'] = "Sensor: "+sensor+" | Valor: "+val
 
-    body = 'Sensor: ' + sensor + ' | Temperatura: ' + temperatura
+    body = 'Sensor: ' + sensor + ' | Valor: ' + val
     msg.attach(MIMEText(body, 'plain'))
 
     server = smtplib.SMTP(check_exist(p='smtp_server'), check_exist(p='smtp_port'))
@@ -161,12 +168,12 @@ def send_email(sensor, temperatura):
     server.quit()
 
 
-def check_temperature(sensor, temperatura):
+def check_val(sensor, val):
     minima = int(check_exist('min_'+str(sensor), 'min_geral'))
     maxima = int(check_exist('max_'+str(sensor), 'max_geral'))
 
-    if temperatura <= minima or temperatura >= maxima:
-        send_email(sensor=sensor, temperatura=temperatura)
+    if val <= minima or val >= maxima:
+        send_email(sensor=sensor, val=val)
 
 
 def save_obj(obj, name):
