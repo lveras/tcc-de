@@ -20,13 +20,11 @@ DATABASE = 'database.db'
 def get_db():
     conn = sqlite3.connect('database.db')
     c = conn.cursor()
-    c.execute("SELECT count(name) FROM sqlite_master "
-              "WHERE type = 'table' AND name = 'tb_afericao'")
 
-    if c.rowcount == 0:
-        c.execute("CREATE TABLE tb_afericao(id INTEGER PRIMARY KEY, "
-                  "sensor INTEGER NOT NULL, val FLOAT NOT NULL, "
-                  "create_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+    c.execute("CREATE TABLE IF NOT EXISTS tb_afericao("
+              "id INTEGER PRIMARY KEY, "
+              "sensor INTEGER NOT NULL, val FLOAT NOT NULL, "
+              "create_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
 
     return c, conn
 
