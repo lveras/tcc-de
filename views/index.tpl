@@ -32,10 +32,6 @@
             <div class="row">
                 <div class="col-xs-12">
                     <div class="page">
-	                    <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#modalConfig">
-                          Configurações
-                        </button>
-
                         <div class="resp-container">
                             <iframe name="table_plot" id="table_plot" class="resp-iframe" src="table_plot" allowfullscreen></iframe>
                         </div>
