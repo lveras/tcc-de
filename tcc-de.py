@@ -4,6 +4,7 @@ import os
 from bottle import route, run, template
 from plotly.offline import plot
 import sqlite3
+from datetime import datetime, timedelta
 
 import plotly.graph_objs as go
 
@@ -33,7 +34,6 @@ def exec_query(query):
 
 @route('/t/<sensor>/<val>')
 def set_val(sensor, val):
-
     exec_query("INSERT INTO tb_afericao(sensor, val) VALUES({}, {})".
                format(sensor, val))
 
@@ -48,8 +48,23 @@ def do_table_plot():
 
         return val[0][0] if val else 0
 
-    datas = exec_query("SELECT distinct strftime('%d-%m-%Y %H:%M', "
-                       "create_date) FROM tb_afericao")
+    query = "SELECT strftime('%Y-%m-%d %H', create_date), max(id) " \
+            "FROM tb_afericao"
+    ult_hora = exec_query(query=query)
+
+    penult_hora = str(23) if int(ult_hora[0][0][-2:]) == 0 \
+        else str(int(ult_hora[0][0][-2:])-1).zfill(2)
+
+    penult_data = "{} {}".format(
+        (datetime.strptime(ult_hora[0][0][0:10], "%Y-%m-%d") -
+         timedelta(days=1)).strftime("%Y-%m-%d"), penult_hora)
+
+    query = "SELECT distinct strftime('%d-%m-%Y %H:%M', create_date) " \
+            "FROM tb_afericao WHERE strftime('%Y-%m-%d %H',create_date) = " \
+            "'{}' OR strftime('%Y-%m-%d %H',create_date) = '{}'".format(
+        ult_hora[0][0], penult_data)
+
+    datas = exec_query(query=query)
 
     sensores = exec_query("SELECT distinct sensor FROM tb_afericao")
 
