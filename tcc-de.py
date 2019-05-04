@@ -60,8 +60,8 @@ def do_table_plot():
          timedelta(days=1)).strftime("%Y-%m-%d"), penult_hora)
 
     query = "SELECT distinct strftime('%d-%m-%Y %H:%M', create_date) " \
-            "FROM tb_afericao WHERE strftime('%Y-%m-%d %H',create_date) = " \
-            "'{}' OR strftime('%Y-%m-%d %H',create_date) = '{}'".format(
+            "FROM tb_afericao WHERE strftime('%Y-%m-%d %H',create_date) like "\
+            "'%{}%' OR strftime('%Y-%m-%d %H',create_date) like '%{}%'".format(
         ult_hora[0][0], penult_data)
 
     datas = exec_query(query=query)
