@@ -74,8 +74,15 @@ def do_table_plot():
     sens = []
 
     for sensor in sensores:
+        if sensor[0] == 1:
+            s = 'Corrente R'
+        elif sensor[0] == 2:
+            s = 'Corrente S'
+        else:
+            s = 'Corrente T'
+
         sens.append(go.Scatter(
-            name='Sensor {}'.format(sensor[0]),
+            name='Sensor {}'.format(s),
             x=y,
             y=[get_val_sensor(data[0], sensor[0]) for data in datas],
         ))
