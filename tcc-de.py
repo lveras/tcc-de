@@ -35,8 +35,10 @@ def exec_query(query):
 @route('/t/<sensor>/<val>')
 def set_val(sensor, val):
     if val <= 30 and val > 0.5:
-        exec_query("INSERT INTO tb_afericao(sensor, val) VALUES({}, {})".
-               format(sensor, val))
+        now = datetime.now().strftime('%Y-%m-%d %H:%M')
+        exec_query("INSERT INTO tb_afericao(sensor, val, create_date) " \
+                "VALUES({}, {}, {})".
+               format(sensor, val, now))
 
 
 @route('/table_plot')
